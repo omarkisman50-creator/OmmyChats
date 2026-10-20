@@ -1,0 +1,63 @@
+
+name: Build OmmyChats Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: Extract Android project
+        run: |
+          unzip -q OmmyChats-Android-login-v0.3.0.zip -d extracted
+          PROJECT_DIR="$(find extracted -type f -name settings.gradle.kts -printf '%h\n' | head -n 1)"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Could not find settings.gradle.kts in the ZIP."
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          if [ ! -f gradlew ]; then
+            echo "Gradle wrapper is missing from the project."
+            exit 1
+          fi
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Prepare APK
+        run: |
+          APK="$(find "$PROJECT_DIR" -type f -path '*/build/outputs/apk/debug/app-debug.apk' | head -n 1)"
+          if [ -z "$APK" ]; then
+            echo "APK was not generated."
+            exit 1
+          fi
+          cp "$APK" "$GITHUB_WORKSPACE/OmmyChats-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmmyChats-debug-apk
+          path: OmmyChats-debug.apk
+          if-no-files-found: error
+          
